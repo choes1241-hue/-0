@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나의 성격 MBTI 찾기</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Noto Sans KR -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <!-- Markdown 렌더링 라이브러리 (Gemini 응답용) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen py-10 px-4">
+
+  <div class="max-w-3xl mx-auto space-y-8">
+    
+    <!-- Header (제목 중앙 배치) -->
+    <header class="text-center space-y-3">
+      <span class="px-3 py-1 bg-indigo-100 text-indigo-700 text-sm font-semibold rounded-full">자신을 알아가는 첫걸음</span>
+      <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">나의 성격 MBTI 찾기</h1>
+      <p class="text-slate-600 text-sm md:text-base max-w-lg mx-auto">
+        양쪽의 문장을 읽고 자신에게 더 가까운 쪽을 선택해 주세요.<br>
+        나 자신을 있는 그대로 솔직하게 바라보는 것이 중요합니다.
+      </p>
+    </header>
+
+    <!-- Gemini API Key 설정 섹션 -->
+    <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+      <div class="flex items-center justify-between">
+        <label for="apiKey" class="font-bold text-slate-700 flex items-center gap-2">
+          🔑 Gemini API 키 입력
+        </label>
+        <span class="text-xs text-slate-400">심층 분석에 활용됩니다</span>
+      </div>
+      <div class="flex gap-2">
+        <input type="password" id="apiKey" placeholder="AI Studio에서 발급받은 API Key를 입력하세요" 
+               class="flex-1 px-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+        <button id="saveKeyBtn" onclick="saveApiKey()" 
+                class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-medium text-sm rounded-xl transition">
+          저장
+        </button>
+      </div>
+      <p id="keyStatus" class="text-xs text-indigo-600 hidden">✓ API 키가 성공적으로 저장되었습니다.</p>
+    </section>
+
+    <!-- 설문지 영역 -->
+    <main class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200/80 space-y-8">
+      
+      <!-- 진행 상태 프로그레스 바 -->
+      <div class="sticky top-4 z-10 bg-white/90 backdrop-blur py-2 border-b border-slate-100">
+        <div class="flex justify-between text-xs font-semibold text-slate-500 mb-1">
+          <span>진행률</span>
+          <span id="progressText">0 / 28</span>
+        </div>
+        <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+          <div id="progressBar" class="bg-indigo-600 h-full w-0 transition-all duration-300"></div>
+        </div>
+      </div>
+
+      <!-- 질문 리스트 바인딩 영역 -->
+      <form id="mbtiForm" class="space-y-8">
+        <!-- JS로 질문들이 동적으로 삽입됩니다 -->
+      </form>
+
+      <!-- Submit Button -->
+      <div class="pt-4 text-center">
+        <button type="button" onclick="calculateMBTI()" 
+                class="w-full md:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg rounded-xl shadow-lg shadow-indigo-200 transition transform hover:-translate-y-0.5 active:translate-y-0">
+          결과 분석하기 ✨
+        </button>
+      </div>
+    </main>
+
+    <!-- 결과 표시 영역 (기본적으로 숨겨짐) -->
+    <section id="resultSection" class="hidden bg-white p-6 md:p-8 rounded-2xl shadow-md border border-indigo-100 space-y-6">
+      <div class="text-center space-y-2 border-b border-slate-100 pb-6">
+        <span class="text-indigo-600 font-bold text-sm tracking-wider uppercase">Your MBTI Result</span>
+        <h2 id="mbtiType" class="text-4xl md:text-5xl font-black text-indigo-600">----</h2>
+        <p class="text-slate-500 text-sm">Gemini AI가 당신의 성격 유형을 심층 분석하고 있습니다.</p>
+      </div>
+
+      <!-- 로딩 아이콘 -->
+      <div id="loadingSpinner" class="flex flex-col items-center justify-center py-8 space-y-3">
+        <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p class="text-sm text-slate-500 animate-pulse">AI가 정성스러운 맞춤형 분석 보고서를 작성 중입니다...</p>
+      </div>
+
+      <!-- AI 분석 결과 출력 영역 -->
+      <div id="aiAnalysisContent" class="prose prose-indigo max-w-none text-slate-700 text-sm md:text-base leading-relaxed hidden">
+        <!-- Markdown HTML 연동 -->
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    // PDF 기반 MBTI 질문 데이터 (총 28문항)
+    const questions = [
+      // E vs I
+      { id: 1, type: 'EI', left: '처음보는 아이들과도 쉽게 이야기하거나 친해지는 편이다.', right: '친한 사람이나 친구가 없는 모임에 가면 매우 불편한 편이다.' },
+      { id: 2, type: 'EI', left: '모르는 사람들이 많이 모여있는 곳에서도 비교적 활발하게 행동하는 편이다.', right: '친구를 쉽게 사귀는 편이 아니며 친한 몇 명의 친구들과 아주 친하게 지낸다.' },
+      { id: 3, type: 'EI', left: '여기 저기 친구나 아는 사람이 많다 (학원친구, 교회친구, 학교 친구등)', right: '평소에 침착하고 조용하다는 말을 자주 듣는다.' },
+      { id: 4, type: 'EI', left: '모임에서 다른 사람보다 말을 많이 하는 편이며 적극적으로 행동한다.', right: '혼자 놀거나 조용히 책을 읽는 모습이 자주 있다.' },
+      { id: 5, type: 'EI', left: '슬프거나 기쁜 일이 생기면 즉시 부모님에게 이야기하는 편이다.', right: '먼저 여러 번 생각해 다음에 행동하는 편이다.' },
+      { id: 6, type: 'EI', left: '활발하고 적극적이라는 말을 많이 듣는 편이다.', right: '부끄러움을 쉽게 타는 편이다.' },
+      { id: 7, type: 'EI', left: '시간이 걸리는 일, 놀이는 싫증을 빨리 내고 새로운 놀이, 활동을 원한다.', right: '자신의 의견이나 감정을 표현하는데 재빠르지 않은 편이다.' },
+
+      // S vs N
+      { id: 8, type: 'SN', left: "'이불처럼 폭신한 구름'이란 꾸밈어보다 '흰구름'처럼 단순한 말이 더 좋다.", right: '상상 속의 이야기를 잘 만들어 내는 편이다.' },
+      { id: 9, type: 'SN', left: '주변 사람들의 얼굴, 키나 다른 특징들을 잘 기억한다.', right: '종종 물건을 잃어버리거나 어디에 두었는지 기억을 못 할 때가 있다.' },
+      { id: 10, type: 'SN', left: '공부할 때 세세하고 자세한 내용을 잘 암기하는 편이다.', right: '다른 아이들이 생각하지도 않은 엉뚱한 행동이나 상상을 할 때가 종종 있다.' },
+      { id: 11, type: 'SN', left: '손으로 직접 만지거나 하나하나 조작하는 활동을 좋아한다.', right: '질문을 많이 하는 편이다.' },
+      { id: 12, type: 'SN', left: '꼼꼼하다는 말을 자주 듣는 편이다.', right: '가끔 내 상상 속에서만 있는 친구를 만들기도 한다.' },
+      { id: 13, type: 'SN', left: '새로운 일이나 활동보다는 늘상 하는 일이 편안하다.', right: '신기한 것에 호기심이 많다.' },
+      { id: 14, type: 'SN', left: "'그게 정말이야?'라는 식의 질문을 많이 한다.", right: "'하고 싶다. 되고 싶다' 꿈이 여러 가지로 많다." },
+
+      // T vs F
+      { id: 15, type: 'TF', left: "'왜'라는 질문을 자주 하는 편이다.", right: '부모님이나 선생님의 말을 잘 듣는 편이다.' },
+      { id: 16, type: 'TF', left: '끝까지 해내는 의지와 끈기가 강한 편이다.', right: '기뻐하고 슬픈 감정이 풍부하고 인정이 많다는 말을 듣는다.' },
+      { id: 17, type: 'TF', left: '궁금한 게 있으면 꼬치꼬치 따져서 궁금증을 풀고 싶어 한다.', right: '정이 많고 순하다는 말을 자주 듣는다.' },
+      { id: 18, type: 'TF', left: '야단을 맞거나 벌을 받아도 눈물을 잘 보이지 않는 편이다.', right: '야단을 맞거나 벌을 받으면 눈물부터 나온다.' },
+      { id: 19, type: 'TF', left: '한번 마음 먹은 일은 꾸준히 밀어나가 꼭 이뤄내는 편이다.', right: '다른 친구들이나 어른들이 내 행동을 어떻게 생각할지 신경이 쓰인다.' },
+      { id: 20, type: 'TF', left: '성적이 올랐거나 잘했을 때 직접적인 칭찬을 받는 게 좋다.', right: '친구들 사이에서 성격이 부드럽다, 싹싹하다, 순하다는 말을 들어본다.' },
+      { id: 21, type: 'TF', left: '부모님, 친구들에게 논리적이고 구체적인 설명으로 설득하는 편이다.', right: '음식, 장난감, 옷을 선택할 때 쉽게 결정을 내리지 못한다.' },
+
+      // J vs P
+      { id: 22, type: 'JP', left: '대체로 공부나 할일을 미리 해놓고 노는 편이다.', right: '계획보다는 어떤 일이 닥치면 그때그때 처리하는 편이다.' },
+      { id: 23, type: 'JP', left: '시험보기 전에 미리 여유있게 공부계획을 짜 놓고 실천한다.', right: '숙제를 미루다가 마지막 순간에 해서 시간에 쫓길 때가 종종 있다.' },
+      { id: 24, type: 'JP', left: '미리 하는 게 편하고 마지막 순간에 쫓기면서 일하는 걸 싫어한다.', right: '방이 어수선하게 지저분해도 크게 신경쓰이지 않고 관심대상에 바로 집중한다.' },
+      { id: 25, type: 'JP', left: '계획에 따라 규칙적인 생활을 하는 편이다.', right: '주변일에 호기심이 많고 새로운 일이 생겨도 잘 적응한다.' },
+      { id: 26, type: 'JP', left: '목표가 뚜렷하고 자신의 의견을 분명히 표현하는 편이다.', right: '남의 지시에 따르기보다는 자신의 마음에 따라 행동하는 것이 좋다.' },
+      { id: 27, type: 'JP', left: '계획에 없는 일이 생기면 짜증이 나고 힘이 든다.', right: '공책이나 책가방을 미리 챙기고 준비하는 편은 아니다.' },
+      { id: 28, type: 'JP', left: '예정에 없던 일로 계획을 바꾸게 되면 힘들어 한다.', right: '자신의 생각, 의견을 크게 주장하지는 않는다.' }
+    ];
+
+    // 페이지 로드 시 폼 생성 및 저장된 API Key 불러오기
+    document.addEventListener('DOMContentLoaded', () => {
+      renderQuestions();
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) {
+        document.getElementById('apiKey').value = savedKey;
+      }
+    });
+
+    // 질문 렌더링 함수
+    function renderQuestions() {
+      const form = document.getElementById('mbtiForm');
+      form.innerHTML = questions.map((q, idx) => `
+        <div class="p-4 md:p-5 rounded-xl border border-slate-100 bg-slate-50/50 space-y-3">
+          <div class="text-xs font-bold text-indigo-600">Q${idx + 1}.</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            
+            <!-- Left Option -->
+            <label class="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-indigo-300 transition">
+              <input type="radio" name="q${q.id}" value="L" onchange="updateProgress()" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+              <span class="text-slate-700">${q.left}</span>
+            </label>
+
+            <!-- Right Option -->
+            <label class="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-indigo-300 transition">
+              <input type="radio" name="q${q.id}" value="R" onchange="updateProgress()" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+              <span class="text-slate-700">${q.right}</span>
+            </label>
+
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // 진행률 업데이트 함수
+    function updateProgress() {
+      const checkedCount = document.querySelectorAll('input[type="radio"]:checked').length;
+      const total = questions.length;
+      const percentage = (checkedCount / total) * 100;
+      
+      document.getElementById('progressBar').style.width = `${percentage}%`;
+      document.getElementById('progressText').innerText = `${checkedCount} / ${total}`;
+    }
+
+    // API 키 저장
+    function saveApiKey() {
+      const key = document.getElementById('apiKey').value.trim();
+      if (key) {
+        localStorage.setItem('gemini_api_key', key);
+        const status = document.getElementById('keyStatus');
+        status.classList.remove('hidden');
+        setTimeout(() => status.classList.add('hidden'), 3000);
+      } else {
+        alert('API Key를 입력해주세요.');
+      }
+    }
+
+    // MBTI 결과 계산 및 Gemini 분석 요청
+    async function calculateMBTI() {
+      const checkedCount = document.querySelectorAll('input[type="radio"]:checked').length;
+      if (checkedCount < questions.length) {
+        alert(`모든 질문에 답해주세요. (현재 ${checkedCount}/${questions.length} 완료)`);
+        return;
+      }
+
+      let scores = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+
+      questions.forEach(q => {
+        const selected = document.querySelector(`input[name="q${q.id}"]:checked`).value;
+        if (q.type === 'EI') selected === 'L' ? scores.E++ : scores.I++;
+        if (q.type === 'SN') selected === 'L' ? scores.S++ : scores.N++;
+        if (q.type === 'TF') selected === 'L' ? scores.T++ : scores.F++;
+        if (q.type === 'JP') selected === 'L' ? scores.J++ : scores.P++;
+      });
+
+      const mbti = [
+        scores.E >= scores.I ? 'E' : 'I',
+        scores.S >= scores.N ? 'S' : 'N',
+        scores.T >= scores.F ? 'T' : 'F',
+        scores.J >= scores.P ? 'J' : 'P'
+      ].join('');
+
+      // UI 결과창 보이기
+      const resultSection = document.getElementById('resultSection');
+      const mbtiTypeEl = document.getElementById('mbtiType');
+      const spinner = document.getElementById('loadingSpinner');
+      const content = document.getElementById('aiAnalysisContent');
+
+      mbtiTypeEl.innerText = mbti;
+      resultSection.classList.remove('hidden');
+      spinner.classList.remove('hidden');
+      content.classList.add('hidden');
+
+      // 스크롤 이동
+      resultSection.scrollIntoView({ behavior: 'smooth' });
+
+      // Gemini API 심층 분석 요청
+      const apiKey = document.getElementById('apiKey').value.trim();
+      if (!apiKey) {
+        spinner.classList.add('hidden');
+        content.classList.remove('hidden');
+        content.innerHTML = `<p class="text-red-500 font-semibold">⚠️ Gemini API Key가 입력되지 않았습니다. 상단에서 API 키를 입력하면 상세한 AI 성격 분석 보고서를 받아보실 수 있습니다.</p>`;
+        return;
+      }
+
+      try {
+        const aiResponse = await fetchGeminiAnalysis(apiKey, mbti, scores);
+        spinner.classList.add('hidden');
+        content.classList.remove('hidden');
+        content.innerHTML = marked.parse(aiResponse);
+      } catch (error) {
+        spinner.classList.add('hidden');
+        content.classList.remove('hidden');
+        content.innerHTML = `<p class="text-red-500">분석을 불러오는 도중 오류가 발생했습니다: ${error.message}</p>`;
+      }
+    }
+
+    // Gemini REST API 호출 함수 (최신 gemini-3.8-flash 모델 적용)
+    async function fetchGeminiAnalysis(apiKey, mbti, scores) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+
+      const prompt = `
+당신은 따뜻하고 전문적인 성격 심리 분석 전문가입니다.
+사용자가 수행한 MBTI 테스트 결과는 다음과 같습니다:
+
+- 최종 MBTI 유형: ${mbti}
+- 상세 점수 분포:
+  - 외향(E) ${scores.E}점 vs 내향(I) ${scores.I}점
+  - 감각(S) ${scores.S}점 vs 직관(N) ${scores.N}점
+  - 사고(T) ${scores.T}점 vs 감정(F) ${scores.F}점
+  - 판단(J) ${scores.J}점 vs 인식(P) ${scores.P}점
+
+다음 지침에 따라 가독성 높고 용기를 주는 심층 분석 보고서를 작성해 주세요:
+1. **${mbti} 유형의 핵심 특징**: 이 유형이 가지는 대표적인 성격적 강점을 따뜻하게 격려해 주세요.
+2. **점수 비율 기반 성향 분석**: 위 점수 비율을 고려하여 사용자가 어느 성향에 더 치우쳐 있는지, 혹은 균형을 이루고 있는지 분석해 주세요.
+3. **자신감 및 장점 개발 팁**: 단점을 고치려 애쓰기보다는 장점을 극대화할 수 있는 구체적인 행동 지침 3가지를 제시해 주세요.
+4. **마음 따뜻한 응원의 한마디**: 친근하고 응원하는 톤으로 가볍게 마무리해 주세요.
+
+Markdown 포맷을 사용하여 깔끔하게 작성해 주세요.
+      `;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || 'Gemini API 호출에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      return data.candidates[0].content.parts[0].text;
+    }
+  </script>
+</body>
+</html>
